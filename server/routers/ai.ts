@@ -1,8 +1,19 @@
 import { publicProcedure, router } from "../_core/trpc";
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { OpenAI } from "openai";
 
-const openai = new OpenAI();
+const getOpenAIClient = () => {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "OPENAI_API_KEY is not configured on the server.",
+    });
+  }
+
+  return new OpenAI({ apiKey });
+};
 
 export const aiRouter = router({
   chat: publicProcedure
@@ -16,6 +27,7 @@ export const aiRouter = router({
     )
     .mutation(async ({ input }) => {
       const { userMessage, currentLevel, courseTitle, currentSlideContent } = input;
+      const openai = getOpenAIClient();
 
       const systemPrompt = `You are Mixy Coach, a DJ teacher inside a learning app.
 You know everything about the app and DJing.
