@@ -19,6 +19,14 @@ import { ENV } from './_core/env';
 let _db: ReturnType<typeof drizzle> | null = null;
 let _client: postgres.Sql | null = null;
 
+const hasMissingColumnError = (error: unknown, columnName: string) => {
+  if (!error || typeof error !== "object") return false;
+  const err = error as any;
+  const code = err?.cause?.code ?? err?.code;
+  const message = String(err?.cause?.message ?? err?.message ?? "");
+  return code === "42703" && message.toLowerCase().includes(columnName.toLowerCase());
+};
+
 // Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
@@ -142,15 +150,24 @@ export async function createGuestUser(name: string) {
   const guestId = `guest_${nanoid()}`;
   
   try {
-    await db.insert(users).values({
+    const inserted = await db.insert(users).values({
       guestId,
       name,
       status: "guest",
       role: "user",
-    });
+    }).returning({ id: users.id });
 
-    return { id: guestId, guestId, name, status: "guest" };
+    return { id: inserted[0]?.id, guestId, name, status: "guest", language: "en" };
   } catch (error) {
+    if (hasMissingColumnError(error, "language") && _client) {
+      // Backward compatibility for deployments where `users.language` is not migrated yet.
+      const fallback = await _client<[{ id: number }]>`
+        insert into users (guest_id, name, status, role)
+        values (${guestId}, ${name}, ${"guest"}, ${"user"})
+        returning id
+      `;
+      return { id: fallback[0]?.id, guestId, name, status: "guest", language: "en" };
+    }
     console.error("[Database] Failed to create guest user:", error);
     throw error;
   }
@@ -175,6 +192,13 @@ export async function saveOnboarding(userId: number, data: any) {
       quizResult: data.quizResult || null,
     });
   } catch (error) {
+    if ((hasMissingColumnError(error, "equipment_model") || hasMissingColumnError(error, "quiz_score") || hasMissingColumnError(error, "quiz_result")) && _client) {
+      await _client`
+        insert into onboarding (user_id, level, goal, equipment, problem)
+        values (${userId}, ${data.level || "beginner"}, ${data.goal || "fun"}, ${data.equipment || "none"}, ${data.problem || "unknown"})
+      `;
+      return;
+    }
     console.error("[Database] Failed to save onboarding:", error);
     throw error;
   }
@@ -408,6 +432,10 @@ export async function updateUserLanguage(userId: number, language: "en" | "fr") 
       updatedAt: new Date(),
     }).where(eq(users.id, userId));
   } catch (error) {
+    if (hasMissingColumnError(error, "language")) {
+      console.warn("[Database] Skipping language update: users.language column not migrated yet");
+      return;
+    }
     console.error("[Database] Failed to update user language:", error);
     throw error;
   }
