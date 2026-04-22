@@ -3,6 +3,7 @@ import { publicProcedure, router } from "../_core/trpc";
 import {
   createGuestUser,
   getUserByGuestId,
+  getUserById,
   saveOnboarding,
   createOrUpdateProgress,
   getProgress,
@@ -14,7 +15,9 @@ import {
   createSubscription,
   getSubscription,
   updateUserLanguage,
+  resetUserProgress,
 } from "../db";
+import { notifyOwner } from "../_core/notification";
 // Mocked course content
 const coursesContent: any[] = [];
 for (let i = 1; i <= 10; i++) {
@@ -130,8 +133,11 @@ export const djRouter = router({
         userId: z.number(),
         level: z.enum(["beginner", "intermediate", "advanced"]),
         goal: z.enum(["fun", "party", "club", "pro"]),
-        equipment: z.enum(["none", "beginner", "advanced", "platines"]),
+        equipment: z.enum(["none", "controller", "turntables", "other"]),
         problem: z.enum(["transitions", "bpm", "structuration", "unknown"]),
+        equipmentModel: z.string().max(255).optional(),
+        quizScore: z.number().nullable().optional(),
+        quizResult: z.enum(["beginner", "intermediate", "advanced"]).nullable().optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -140,12 +146,49 @@ export const djRouter = router({
         goal: input.goal,
         equipment: input.equipment,
         problem: input.problem,
+        equipmentModel: input.equipmentModel,
+        quizScore: input.quizScore,
+        quizResult: input.quizResult,
       });
 
       // Create or update progress
       await createOrUpdateProgress(input.userId);
 
       return { success: true };
+    }),
+  getUserProfile: publicProcedure
+    .input(z.object({ userId: z.number() }))
+    .query(async ({ input }) => {
+      const user = await getUserById(input.userId);
+      if (!user) return null;
+      return {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+      };
+    }),
+
+  resetProgress: publicProcedure
+    .input(z.object({ userId: z.number(), level: z.number().min(1).default(1) }))
+    .mutation(async ({ input }) => {
+      await resetUserProgress(input.userId, input.level);
+      return { success: true };
+    }),
+
+  contact: publicProcedure
+    .input(
+      z.object({
+        email: z.string().email(),
+        subject: z.enum(["Paiement", "Bug technique", "Question DJ", "Autre"]),
+        message: z.string().min(10).max(5000),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const sent = await notifyOwner({
+        title: `[Mixy Contact] ${input.subject}`,
+        content: `From: ${input.email}\n\n${input.message}`,
+      });
+      return { success: sent };
     }),
 
   /**

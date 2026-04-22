@@ -121,6 +121,17 @@ export async function getUserByGuestId(guestId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
+export async function getUserById(userId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get user by id: database not available");
+    return undefined;
+  }
+
+  const result = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
 export async function createGuestUser(name: string) {
   const db = await getDb();
   if (!db) {
@@ -159,9 +170,45 @@ export async function saveOnboarding(userId: number, data: any) {
       goal: data.goal || "fun",
       equipment: data.equipment || "none",
       problem: data.problem || "unknown",
+      equipmentModel: data.equipmentModel || null,
+      quizScore: data.quizScore?.toString?.() ?? null,
+      quizResult: data.quizResult || null,
     });
   } catch (error) {
     console.error("[Database] Failed to save onboarding:", error);
+    throw error;
+  }
+}
+
+export async function resetUserProgress(userId: number, level: number = 1) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot reset progress: database not available");
+    return;
+  }
+
+  try {
+    await db.delete(completedLevels).where(eq(completedLevels.userId, userId));
+
+    const existing = await getProgress(userId);
+    if (existing) {
+      await db
+        .update(progress)
+        .set({
+          currentLevel: level,
+          lastCompletedLevel: Math.max(0, level - 1),
+          updatedAt: new Date(),
+        })
+        .where(eq(progress.userId, userId));
+    } else {
+      await db.insert(progress).values({
+        userId,
+        currentLevel: level,
+        lastCompletedLevel: Math.max(0, level - 1),
+      });
+    }
+  } catch (error) {
+    console.error("[Database] Failed to reset progress:", error);
     throw error;
   }
 }
