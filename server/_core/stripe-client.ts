@@ -78,21 +78,14 @@ async function createRealCheckoutSession(
 }
 
 /**
- * Create a mock Stripe Checkout session (for testing without real Stripe)
+ * Sans clés Stripe, on refuse une fausse URL (404 sur checkout.stripe.com) — inutile et trompeur.
  */
 function createMockCheckoutSession(
-  params: CheckoutSessionParams
-): CheckoutSession {
-  const sessionId = `cs_test_${Math.random().toString(36).substring(7)}`;
-
-  console.log(
-    `[Stripe Mock] Created checkout session for user ${params.userId}, level ${params.level}`
+  _params: CheckoutSessionParams
+): never {
+  throw new Error(
+    "Stripe n'est pas configuré côté serveur : définir STRIPE_SECRET_KEY et STRIPE_PRICE_ID. Aucun paiement ne peut être initialisé sans ces variables."
   );
-
-  return {
-    id: sessionId,
-    url: `https://checkout.stripe.com/pay/${sessionId}`,
-  };
 }
 
 /**

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { publicProcedure, router } from "../_core/trpc";
 import {
   createGuestUser,
@@ -12,7 +13,6 @@ import {
   getCompletedLevels,
   saveTempQuizState,
   getTempQuizState,
-  createSubscription,
   getSubscription,
   updateUserLanguage,
   resetUserProgress,
@@ -262,9 +262,14 @@ export const djRouter = router({
       });
 
       const score = (correctCount / questions.length) * 100;
+      const rounded = Math.round(score);
 
       // Save quiz result
       await saveQuizResult(input.userId, input.level, score);
+
+      if (score >= 50) {
+        await markLevelCompleted(input.userId, input.level);
+      }
 
       // Save temp quiz state for paywall
       await saveTempQuizState(input.userId, input.level, score, {
@@ -273,7 +278,7 @@ export const djRouter = router({
       });
 
       return {
-        score: Math.round(score),
+        score: rounded,
         correctCount,
         totalCount: questions.length,
       };
@@ -284,18 +289,11 @@ export const djRouter = router({
    */
   completeLevel: publicProcedure
     .input(z.object({ userId: z.number(), level: z.number() }))
-    .mutation(async ({ input }) => {
-      // Mark level as completed
-      await markLevelCompleted(input.userId, input.level);
-
-      // Update progress
-      const userProgress = await getProgress(input.userId);
-      if (userProgress && input.level > userProgress.lastCompletedLevel) {
-        // Update last completed level
-        // This would require an update function in db.ts
-      }
-
-      return { success: true };
+    .mutation(async () => {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "Validation de niveau uniquement via quiz (serveur), pas via cette route.",
+      });
     }),
 
   /**
@@ -319,14 +317,11 @@ export const djRouter = router({
         stripeSubscriptionId: z.string(),
       })
     )
-    .mutation(async ({ input }) => {
-      await createSubscription(
-        input.userId,
-        input.stripeCustomerId,
-        input.stripeSubscriptionId
-      );
-
-      return { success: true };
+    .mutation(async () => {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "Abonnement activé uniquement via webhooks Stripe signés.",
+      });
     }),
 
   /**

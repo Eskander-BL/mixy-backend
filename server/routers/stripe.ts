@@ -1,19 +1,15 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { publicProcedure, router } from "../_core/trpc";
-import {
-  createSubscription,
-  getSubscription,
-  markLevelCompleted,
-} from "../db";
+import { getSubscription } from "../db";
+import { createCheckoutSession as createStripeSession } from "../_core/stripe-client";
 
 /**
- * Stripe payment router
+ * Stripe payment router — validation paiement **uniquement** via webhooks Stripe.
  */
 export const stripeRouter = router({
   /**
-   * Create a Stripe Checkout session
-   * This endpoint creates a session with metadata (userId, level)
-   * The metadata will be used by the webhook to update the database
+   * Create a Stripe Checkout session (vrai Stripe si clés présentes, sinon erreur explicite).
    */
   createCheckoutSession: publicProcedure
     .input(
@@ -25,69 +21,33 @@ export const stripeRouter = router({
       })
     )
     .mutation(async ({ input }) => {
-      // In production, you would call the real Stripe API:
-      // const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-      // const session = await stripe.checkout.sessions.create({
-      //   payment_method_types: ['card'],
-      //   mode: 'subscription',
-      //   line_items: [{
-      //     price: process.env.STRIPE_PRICE_ID!,
-      //     quantity: 1,
-      //   }],
-      //   success_url: input.successUrl,
-      //   cancel_url: input.cancelUrl,
-      //   metadata: {
-      //     userId: input.userId.toString(),
-      //     level: input.level.toString(),
-      //   },
-      // });
-
-      // For MVP testing, return a mock session with metadata
-      // The metadata structure matches what Stripe would return
-      const sessionId = `cs_test_${Math.random().toString(36).substring(7)}`;
-
-      return {
-        sessionId,
-        checkoutUrl: `https://checkout.stripe.com/pay/${sessionId}`,
-        // Include metadata for reference (not used in mock)
-        metadata: {
-          userId: input.userId.toString(),
-          level: input.level.toString(),
-        },
-      };
-    }),
-
-  /**
-   * Confirm payment and activate subscription
-   * This would be called by the webhook handler
-   */
-  confirmPayment: publicProcedure
-    .input(
-      z.object({
-        userId: z.number(),
-        level: z.number(),
-        stripeCustomerId: z.string(),
-        stripeSubscriptionId: z.string(),
-      })
-    )
-    .mutation(async ({ input }) => {
       try {
-        // Create subscription in database
-        await createSubscription(
-          input.userId,
-          input.stripeCustomerId,
-          input.stripeSubscriptionId
-        );
-
-
-
+        const session = await createStripeSession({
+          userId: input.userId,
+          level: input.level,
+          successUrl: input.successUrl,
+          cancelUrl: input.cancelUrl,
+        });
+        if (!session.url) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Stripe a renvoyé une session sans URL de checkout",
+          });
+        }
         return {
-          success: true,
-          message: "Subscription activated, granting access to unlocked levels",
+          sessionId: session.id,
+          checkoutUrl: session.url,
         };
-      } catch (error) {
-        console.error("[Stripe] Failed to confirm payment:", error);
-        throw error;
+      } catch (e) {
+        if (e instanceof TRPCError) {
+          throw e;
+        }
+        const message = e instanceof Error ? e.message : "Création de session échouée";
+        console.error("[Stripe] createCheckoutSession failed:", e);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message,
+        });
       }
     }),
 

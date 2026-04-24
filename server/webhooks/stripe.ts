@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import crypto from "crypto";
 import { getDb } from "../db";
-import { subscriptions, completedLevels } from "../../drizzle/schema";
+import { subscriptions } from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
 
 /**
@@ -131,14 +131,9 @@ async function handleCheckoutSessionCompleted(session: any) {
       status: "active",
     });
 
-    // Mark level as completed
-    await db.insert(completedLevels).values({
-      userId: parseInt(userId),
-      level,
-    });
-
+    // Niveau validé = quiz (côté app), jamais le paiement. Ici: abonnement actif seulement.
     console.log(
-      `[Stripe Webhook] Subscription activated for user ${userId}, level ${level} unlocked`
+      `[Stripe Webhook] Subscription activated for user ${userId} (checkout context level ${level} for metadata / analytics only)`
     );
   } catch (error) {
     console.error("[Stripe Webhook] Failed to process payment:", error);
