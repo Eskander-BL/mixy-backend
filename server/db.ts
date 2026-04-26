@@ -1,4 +1,4 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, ne } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -138,6 +138,76 @@ export async function getUserById(userId: number) {
 
   const result = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   return result.length > 0 ? result[0] : undefined;
+}
+
+/**
+ * Recherche par email (comparaison en minuscules, trim).
+ */
+export async function getUserByEmail(email: string) {
+  const db = await getDb();
+  if (!db) {
+    return undefined;
+  }
+  const normalized = email.trim().toLowerCase();
+  const result = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, normalized))
+    .limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+/**
+ * Un autre utilisateur utilise déjà cet email (exclut `exceptUserId`).
+ */
+export async function isEmailTakenByOther(email: string, exceptUserId: number) {
+  const db = await getDb();
+  if (!db) {
+    return false;
+  }
+  const normalized = email.trim().toLowerCase();
+  const result = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.email, normalized), ne(users.id, exceptUserId)))
+    .limit(1);
+  return result.length > 0;
+}
+
+/**
+ * Passe le guest en compte local : email, hash, status registered ; retire le guestId.
+ */
+export async function updateGuestToEmailAccount(
+  userId: number,
+  data: { email: string; passwordHash: string }
+) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+  const normalized = data.email.trim().toLowerCase();
+  const now = new Date();
+  await db
+    .update(users)
+    .set({
+      email: normalized,
+      passwordHash: data.passwordHash,
+      status: "registered",
+      loginMethod: "email",
+      guestId: null,
+      lastSignedIn: now,
+      updatedAt: now,
+    })
+    .where(eq(users.id, userId));
+}
+
+export async function touchUserSignedIn(userId: number) {
+  const db = await getDb();
+  if (!db) {
+    return;
+  }
+  const now = new Date();
+  await db.update(users).set({ lastSignedIn: now, updatedAt: now }).where(eq(users.id, userId));
 }
 
 export async function createGuestUser(name: string) {
