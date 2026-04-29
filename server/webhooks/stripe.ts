@@ -155,11 +155,19 @@ async function handleSubscriptionUpdated(subscription: any) {
   const stripeSubscriptionId = subscription.id;
   const status = subscription.status === "active" ? "active" : "expired";
 
+  const periodEndSec = subscription.current_period_end as number | undefined;
+  const endDate =
+    typeof periodEndSec === "number" && Number.isFinite(periodEndSec)
+      ? new Date(periodEndSec * 1000)
+      : undefined;
+
   try {
-    // Update subscription status
     await db
       .update(subscriptions)
-      .set({ status })
+      .set({
+        status,
+        ...(endDate ? { endDate, updatedAt: new Date() } : { updatedAt: new Date() }),
+      })
       .where(eq(subscriptions.stripeSubscriptionId, stripeSubscriptionId));
 
     console.log(
@@ -184,12 +192,16 @@ async function handleSubscriptionDeleted(subscription: any) {
 
   const stripeSubscriptionId = subscription.id;
 
-  try {
-    // Mark subscription as cancelled
-    await db
-      .update(subscriptions)
-      .set({ status: "cancelled" })
-      .where(eq(subscriptions.stripeSubscriptionId, stripeSubscriptionId));
+    try {
+      // Mark subscription as cancelled — fin d'accès alignée avec Stripe (getSubscriptionStatus lit Stripe en live)
+      await db
+        .update(subscriptions)
+        .set({
+          status: "cancelled",
+          endDate: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(subscriptions.stripeSubscriptionId, stripeSubscriptionId));
 
     console.log(
       `[Stripe Webhook] Subscription ${stripeSubscriptionId} cancelled`

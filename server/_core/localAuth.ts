@@ -76,5 +76,12 @@ function parseCookies(cookieHeader: string | undefined): Map<string, string> {
   if (!cookieHeader) {
     return new Map();
   }
-  return new Map(Object.entries(parseCookieHeader(cookieHeader)));
+  const parsed = parseCookieHeader(cookieHeader);
+  const map = new Map<string, string>();
+  for (const [key, value] of Object.entries(parsed)) {
+    if (typeof value === "string") {
+      map.set(key, value);
+    }
+  }
+  return map;
 }

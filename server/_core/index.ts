@@ -31,13 +31,19 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
+  // Webhooks Stripe : corps brut requis pour la signature — avant express.json()
+  registerWebhooks(app);
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   // CORS configuration for cross-origin requests
   app.use((req, res, next) => {
     const origin = req.headers.origin;
-    // Allow requests from Vercel frontend and localhost for development
+    const fromEnv =
+      process.env.ALLOWED_ORIGINS?.split(",")
+        .map(s => s.trim().replace(/\/$/, ""))
+        .filter(Boolean) ?? [];
+    // Vercel + localhost defaults; add production / custom domains via ALLOWED_ORIGINS on Railway
     const allowedOrigins = [
       "https://mixy-frontend.vercel.app",
       "https://mixy-frontend-git-main-eskanders-projects.vercel.app",
@@ -45,6 +51,7 @@ async function startServer() {
       "http://localhost:5173",
       "http://localhost:3000",
       "http://localhost:3001",
+      ...fromEnv,
     ];
     if (origin && allowedOrigins.includes(origin)) {
       res.setHeader("Access-Control-Allow-Origin", origin);
@@ -59,8 +66,6 @@ async function startServer() {
   });
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
-  // Stripe webhooks
-  registerWebhooks(app);
   // tRPC API
   app.use(
     "/api/trpc",

@@ -88,6 +88,67 @@ function createMockCheckoutSession(
   );
 }
 
+function assertStripeSecret(): void {
+  if (!process.env.STRIPE_SECRET_KEY) {
+    throw new Error("STRIPE_SECRET_KEY manquant");
+  }
+}
+
+/**
+ * Annulation « cancel anytime » : le renouvellement est coupé mais l’accès reste jusqu’à la fin
+ * de la période déjà payée (comportement Stripe `cancel_at_period_end`).
+ */
+export async function cancelSubscriptionAtPeriodEnd(
+  stripeSubscriptionId: string,
+): Promise<{ currentPeriodEnd: Date; cancelAtPeriodEnd: boolean }> {
+  assertStripeSecret();
+  const Stripe = (await import("stripe")).default;
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+  const sub = await stripe.subscriptions.update(stripeSubscriptionId, {
+    cancel_at_period_end: true,
+  });
+  return {
+    currentPeriodEnd: new Date(sub.current_period_end * 1000),
+    cancelAtPeriodEnd: sub.cancel_at_period_end,
+  };
+}
+
+/**
+ * Portail client Stripe (carte, factures).
+ */
+export async function createBillingPortalSession(params: {
+  stripeCustomerId: string;
+  returnUrl: string;
+}): Promise<{ url: string }> {
+  assertStripeSecret();
+  const Stripe = (await import("stripe")).default;
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+  const session = await stripe.billingPortal.sessions.create({
+    customer: params.stripeCustomerId,
+    return_url: params.returnUrl,
+  });
+  return { url: session.url || "" };
+}
+
+/**
+ * État Stripe à jour (statut, fin de période, annulation à la fin de période en cours).
+ */
+export async function retrieveStripeSubscription(stripeSubscriptionId: string): Promise<{
+  status: string;
+  currentPeriodEnd: Date;
+  cancelAtPeriodEnd: boolean;
+}> {
+  assertStripeSecret();
+  const Stripe = (await import("stripe")).default;
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+  const sub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+  return {
+    status: sub.status,
+    currentPeriodEnd: new Date(sub.current_period_end * 1000),
+    cancelAtPeriodEnd: sub.cancel_at_period_end,
+  };
+}
+
 /**
  * Verify Stripe webhook signature
  * Requires: STRIPE_WEBHOOK_SECRET
