@@ -45,6 +45,8 @@ async function startServer() {
         .filter(Boolean) ?? [];
     // Vercel + localhost defaults; add production / custom domains via ALLOWED_ORIGINS on Railway
     const allowedOrigins = [
+      "https://mixyia.com",
+      "https://www.mixyia.com",
       "https://mixy-frontend.vercel.app",
       "https://mixy-frontend-git-main-eskanders-projects.vercel.app",
       "https://mixy-frontend-abae4calx-eskanders-projects.vercel.app",
@@ -64,6 +66,19 @@ async function startServer() {
     }
     next();
   });
+
+  // Plain HTTP checks (Railway / uptime); API métier reste sur /api/trpc
+  app.get("/", (_req, res) => {
+    res.json({
+      ok: true,
+      service: "mixy-api",
+      trpc: "/api/trpc",
+    });
+  });
+  app.get("/api/health", (_req, res) => {
+    res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
   // tRPC API
