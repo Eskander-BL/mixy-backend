@@ -458,7 +458,11 @@ export async function getTempQuizState(userId: number) {
   }
 }
 
-export async function createSubscription(userId: number, stripeCustomerId: string, stripeSubscriptionId: string) {
+export async function createSubscription(
+  userId: number,
+  stripeCustomerId: string | null | undefined,
+  stripeSubscriptionId: string | null | undefined,
+) {
   const db = await getDb();
   if (!db) {
     console.warn("[Database] Cannot create subscription: database not available");
@@ -467,22 +471,44 @@ export async function createSubscription(userId: number, stripeCustomerId: strin
 
   try {
     const startDate = new Date();
-    const endDate = new Date(startDate.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
+    const endDate = new Date(startDate.getTime() + 30 * 24 * 60 * 60 * 1000); // Placeholder; Stripe envoie la vraie fin via customer.subscription.updated
+    const customerId =
+      stripeCustomerId != null && stripeCustomerId !== "" ? String(stripeCustomerId) : null;
+    const subId =
+      stripeSubscriptionId != null && stripeSubscriptionId !== ""
+        ? String(stripeSubscriptionId)
+        : null;
 
-    await db.insert(subscriptions).values({
-      userId,
-      stripeCustomerId,
-      stripeSubscriptionId,
-      startDate,
-      endDate,
-      status: "active",
-    });
+    await db
+      .insert(subscriptions)
+      .values({
+        userId,
+        stripeCustomerId: customerId,
+        stripeSubscriptionId: subId,
+        startDate,
+        endDate,
+        status: "active",
+      })
+      .onConflictDoUpdate({
+        target: subscriptions.userId,
+        set: {
+          stripeCustomerId: customerId,
+          stripeSubscriptionId: subId,
+          startDate,
+          endDate,
+          status: "active",
+          updatedAt: new Date(),
+        },
+      });
 
-    // Update user subscription status
-    await db.update(users).set({
-      subscriptionActive: true,
-      subscriptionExpiresAt: endDate,
-    }).where(eq(users.id, userId));
+    await db
+      .update(users)
+      .set({
+        subscriptionActive: true,
+        subscriptionExpiresAt: endDate,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId));
   } catch (error) {
     console.error("[Database] Failed to create subscription:", error);
     throw error;
