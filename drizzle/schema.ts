@@ -41,6 +41,8 @@ export const users = pgTable("users", {
   language: userLanguage("language").default("en").notNull(),
   subscriptionActive: boolean("subscription_active").default(false).notNull(),
   subscriptionExpiresAt: timestamp("subscription_expires_at"),
+  /** JSON MixyLearningProfile (équipement, table cible) — synchro multi-appareils */
+  learningProfileJson: text("learning_profile_json"),
 });
 
 export type User = typeof users.$inferSelect;

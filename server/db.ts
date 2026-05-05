@@ -210,6 +210,33 @@ export async function touchUserSignedIn(userId: number) {
   await db.update(users).set({ lastSignedIn: now, updatedAt: now }).where(eq(users.id, userId));
 }
 
+export async function updateUserLearningProfile(userId: number, profileJson: string) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot save learning profile: database not available");
+    return;
+  }
+  const now = new Date();
+  try {
+    await db
+      .update(users)
+      .set({
+        learningProfileJson: profileJson,
+        updatedAt: now,
+      })
+      .where(eq(users.id, userId));
+  } catch (error) {
+    if (hasMissingColumnError(error, "learning_profile_json")) {
+      console.warn(
+        "[Database] Column learning_profile_json missing — run migration drizzle/0002_user_learning_profile.sql",
+      );
+      return;
+    }
+    console.error("[Database] Failed to save learning profile:", error);
+    throw error;
+  }
+}
+
 export async function createGuestUser(name: string) {
   const db = await getDb();
   if (!db) {

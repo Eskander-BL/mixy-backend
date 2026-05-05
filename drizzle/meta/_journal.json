@@ -15,6 +15,13 @@
       "when": 1776842732350,
       "tag": "0001_graceful_fabian_cortez",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1776842800000,
+      "tag": "0002_user_learning_profile",
+      "breakpoints": true
     }
   ]
 }

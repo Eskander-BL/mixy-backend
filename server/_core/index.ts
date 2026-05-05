@@ -45,6 +45,8 @@ async function startServer() {
         .filter(Boolean) ?? [];
     // Vercel + localhost defaults; add production / custom domains via ALLOWED_ORIGINS on Railway
     const allowedOrigins = [
+      "https://mixy.com",
+      "https://www.mixy.com",
       "https://mixyia.com",
       "https://www.mixyia.com",
       "https://mixy-frontend.vercel.app",

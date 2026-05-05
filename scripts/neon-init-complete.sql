@@ -120,6 +120,7 @@ CREATE TABLE "users" (
   "language" "user_language" DEFAULT 'en' NOT NULL,
   "subscription_active" boolean DEFAULT false NOT NULL,
   "subscription_expires_at" timestamp,
+  "learning_profile_json" text,
   CONSTRAINT "users_guest_id_unique" UNIQUE ("guest_id"),
   CONSTRAINT "users_openId_unique" UNIQUE ("openId"),
   CONSTRAINT "users_email_unique" UNIQUE ("email")
